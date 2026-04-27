@@ -8,7 +8,7 @@ import os, json, re, requests
 from datetime import date, timedelta
 from collections import defaultdict
 
-API_KEY = os.environ["KLAVIYO_API_KEY"]
+API_KEY = os.environ["KLAVIYO_API_KEY"].strip()
 BASE    = "https://a.klaviyo.com/api"
 PLACED_ORDER_ID   = "RWb2qv"
 SUBSCRIBED_ID     = "S2Baiy"
