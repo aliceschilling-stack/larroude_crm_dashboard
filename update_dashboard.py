@@ -37,12 +37,11 @@ def campaign_report(start, end):
     payload = {"data": {"type": "campaign-values-report", "attributes": {
         "timeframe": {"start": iso(start), "end": iso_end(end)},
         "conversion_metric_id": PLACED_ORDER_ID,
-        "filter": "equals(send_channel,'email')",
         "statistics": [
             "recipients", "open_rate", "click_rate", "conversion_rate",
             "conversions", "bounce_rate", "unsubscribe_rate",
+            "conversion_value", "revenue_per_recipient",
         ],
-        "value_statistics": ["conversion_value", "revenue_per_recipient"],
         "group_by": ["campaign_id", "campaign_message_id", "send_channel"],
     }}}
     r = requests.post(f"{BASE}/campaign-values-reports/", headers=HEADERS, json=payload)
@@ -54,11 +53,10 @@ def campaign_series(start, end):
     payload = {"data": {"type": "campaign-series-report", "attributes": {
         "timeframe": {"start": iso(start), "end": iso_end(end)},
         "conversion_metric_id": PLACED_ORDER_ID,
-        "filter": "equals(send_channel,'email')",
         "statistics": [
             "recipients", "open_rate", "click_rate",
+            "conversion_value", "revenue_per_recipient",
         ],
-        "value_statistics": ["conversion_value", "revenue_per_recipient"],
         "interval": "day",
     }}}
     r = requests.post(f"{BASE}/campaign-series-reports/", headers=HEADERS, json=payload)
@@ -70,12 +68,11 @@ def flow_report(start, end):
     payload = {"data": {"type": "flow-values-report", "attributes": {
         "timeframe": {"start": iso(start), "end": iso_end(end)},
         "conversion_metric_id": PLACED_ORDER_ID,
-        "filter": "equals(send_channel,'email')",
         "statistics": [
             "recipients", "open_rate", "click_rate", "conversion_rate",
             "conversions", "bounce_rate", "unsubscribe_rate",
+            "conversion_value", "revenue_per_recipient",
         ],
-        "value_statistics": ["conversion_value", "revenue_per_recipient"],
         "group_by": ["flow_id", "send_channel"],
     }}}
     r = requests.post(f"{BASE}/flow-values-reports/", headers=HEADERS, json=payload)
@@ -107,16 +104,16 @@ def build_camp_top(resp, campaign_names):
     for item in (resp.get("data") or []):
         g  = item.get("groupings", {})
         st = item.get("statistics", {})
-        vst= item.get("value_statistics", {})
         cid = g.get("campaign_id", "")
-        name = campaign_names.get(cid, cid)
+        cinfo = campaign_names.get(cid, {})
+        name = cinfo.get("name", cid) if isinstance(cinfo, dict) else cinfo
         rc  = int(st.get("recipients", 0) or 0)
         if rc == 0: continue
-        cv  = safe(vst.get("conversion_value", 0), 2)
-        rpr = safe(vst.get("revenue_per_recipient", 0))
+        cv  = safe(st.get("conversion_value", 0), 2)
+        rpr = safe(st.get("revenue_per_recipient", 0))
         rows.append({
             "name": name,
-            "st":   g.get("send_time", "")[:10] if g.get("send_time") else "",
+            "st":   cinfo.get("st", "") if isinstance(cinfo, dict) else "",
             "rc":   rc,
             "opr":  pct(st.get("open_rate")),
             "ctr":  pct(st.get("click_rate")),
@@ -146,10 +143,9 @@ def build_overtime(series_resp):
     for item in (series_resp.get("data") or []):
         dt  = item.get("date", "")[:10]
         st  = item.get("statistics", {})
-        vst = item.get("value_statistics", {})
         rc  = int(st.get("recipients", 0) or 0)
         if not dt or rc == 0: continue
-        daily[dt]["v"]     += safe(vst.get("conversion_value", 0), 2)
+        daily[dt]["v"]     += safe(st.get("conversion_value", 0), 2)
         daily[dt]["r"]     += rc
         daily[dt]["o_sum"] += pct(st.get("open_rate")) * rc
         daily[dt]["c_sum"] += pct(st.get("click_rate")) * rc
@@ -175,23 +171,26 @@ def get_campaign_names(start, end):
     }
     r = requests.get(f"{BASE}/campaigns/", headers=HEADERS, params=params)
     r.raise_for_status()
-    names = {}
+    info = {}
     for item in r.json().get("data", []):
-        names[item["id"]] = item["attributes"].get("name", item["id"])
-    return names
+        attrs = item["attributes"]
+        info[item["id"]] = {
+            "name": attrs.get("name", item["id"]),
+            "st":   (attrs.get("send_time") or "")[:10],
+        }
+    return info
 
 def build_flow_top(resp, flow_names):
     rows = []
     for item in (resp.get("data") or []):
         g   = item.get("groupings", {})
         st  = item.get("statistics", {})
-        vst = item.get("value_statistics", {})
         fid = g.get("flow_id", "")
         name = flow_names.get(fid, fid)
         rc  = int(st.get("recipients", 0) or 0)
         if rc == 0: continue
-        cv  = safe(vst.get("conversion_value", 0), 2)
-        rpr = safe(vst.get("revenue_per_recipient", 0))
+        cv  = safe(st.get("conversion_value", 0), 2)
+        rpr = safe(st.get("revenue_per_recipient", 0))
         rows.append({
             "name": name,
             "rc":   rc,
@@ -245,12 +244,13 @@ def build_prior(days):
     for item in (c_resp.get("data") or []):
         g   = item.get("groupings", {})
         st  = item.get("statistics", {})
-        vst = item.get("value_statistics", {})
-        cid = g.get("campaign_id", "")
-        rc  = int(st.get("recipients", 0) or 0)
+
+        cid   = g.get("campaign_id", "")
+        cinfo = cn.get(cid, {})
+        rc    = int(st.get("recipients", 0) or 0)
         if rc == 0: continue
         all_c_rows.append({
-            "name": cn.get(cid, cid),
+            "name": cinfo.get("name", cid) if isinstance(cinfo, dict) else cinfo,
             "rc":   rc,
             "opr":  pct(st.get("open_rate")),
             "ctr":  pct(st.get("click_rate")),
@@ -258,8 +258,8 @@ def build_prior(days):
             "cn":   int(st.get("conversions", 0) or 0),
             "br":   pct(st.get("bounce_rate")),
             "ur":   pct(st.get("unsubscribe_rate")),
-            "cv":   safe(vst.get("conversion_value", 0), 2),
-            "rpr":  safe(vst.get("revenue_per_recipient", 0)),
+            "cv":   safe(st.get("conversion_value", 0), 2),
+            "rpr":  safe(st.get("revenue_per_recipient", 0)),
         })
 
     c_rows = sorted(all_c_rows, key=lambda x: x["cv"], reverse=True)[:15]
@@ -296,12 +296,13 @@ def build_yoy(days):
     for item in (c_resp.get("data") or []):
         g   = item.get("groupings", {})
         st  = item.get("statistics", {})
-        vst = item.get("value_statistics", {})
-        cid = g.get("campaign_id", "")
-        rc  = int(st.get("recipients", 0) or 0)
+
+        cid   = g.get("campaign_id", "")
+        cinfo = cn.get(cid, {})
+        rc    = int(st.get("recipients", 0) or 0)
         if rc == 0: continue
         all_c_rows.append({
-            "name": cn.get(cid, cid),
+            "name": cinfo.get("name", cid) if isinstance(cinfo, dict) else cinfo,
             "rc":   rc,
             "opr":  pct(st.get("open_rate")),
             "ctr":  pct(st.get("click_rate")),
@@ -309,8 +310,8 @@ def build_yoy(days):
             "cn":   int(st.get("conversions", 0) or 0),
             "br":   pct(st.get("bounce_rate")),
             "ur":   pct(st.get("unsubscribe_rate")),
-            "cv":   safe(vst.get("conversion_value", 0), 2),
-            "rpr":  safe(vst.get("revenue_per_recipient", 0)),
+            "cv":   safe(st.get("conversion_value", 0), 2),
+            "rpr":  safe(st.get("revenue_per_recipient", 0)),
         })
 
     c_rows = sorted(all_c_rows, key=lambda x: x["cv"], reverse=True)[:15]
@@ -343,15 +344,15 @@ def build_period(days):
 
     all_c_rows = []
     for item in (c_resp.get("data") or []):
-        g   = item.get("groupings", {})
-        st  = item.get("statistics", {})
-        vst = item.get("value_statistics", {})
-        cid = g.get("campaign_id", "")
-        rc  = int(st.get("recipients", 0) or 0)
+        g     = item.get("groupings", {})
+        st    = item.get("statistics", {})
+        cid   = g.get("campaign_id", "")
+        cinfo = cn.get(cid, {})
+        rc    = int(st.get("recipients", 0) or 0)
         if rc == 0: continue
         all_c_rows.append({
-            "name": cn.get(cid, cid),
-            "st":   g.get("send_time", "")[:10] if g.get("send_time") else "",
+            "name": cinfo.get("name", cid) if isinstance(cinfo, dict) else cinfo,
+            "st":   cinfo.get("st", "") if isinstance(cinfo, dict) else "",
             "rc":   rc,
             "opr":  pct(st.get("open_rate")),
             "ctr":  pct(st.get("click_rate")),
@@ -359,8 +360,8 @@ def build_period(days):
             "cn":   int(st.get("conversions", 0) or 0),
             "br":   pct(st.get("bounce_rate")),
             "ur":   pct(st.get("unsubscribe_rate")),
-            "cv":   safe(vst.get("conversion_value", 0), 2),
-            "rpr":  safe(vst.get("revenue_per_recipient", 0)),
+            "cv":   safe(st.get("conversion_value", 0), 2),
+            "rpr":  safe(st.get("revenue_per_recipient", 0)),
         })
 
     c_rows = sorted(all_c_rows, key=lambda x: x["cv"], reverse=True)[:15]
