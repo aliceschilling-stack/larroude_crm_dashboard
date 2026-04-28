@@ -155,6 +155,7 @@ def build_overtime(series_resp):
     d, v, r, o, c, p = [], [], [], [], [], []
     for dt in dates:
         rec = daily[dt]["r"]
+        if rec < 1000: continue  # skip days dominated by test/tiny campaigns
         rev = daily[dt]["v"]
         d.append(dt)
         v.append(round(rev, 2))
@@ -460,7 +461,7 @@ def main():
     def replace_var(src, name, value):
         pattern = rf'const {name}=.*?;'
         replacement = f'const {name}={json.dumps(value, separators=(",",":"))};'
-        return re.sub(pattern, replacement, src, count=1, flags=re.DOTALL)
+        return re.sub(pattern, lambda _: replacement, src, count=1, flags=re.DOTALL)
 
     html = replace_var(html, "DATA",    data_js)
     html = replace_var(html, "PRIOR",   prior)
