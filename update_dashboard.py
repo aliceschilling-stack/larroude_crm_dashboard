@@ -474,4 +474,10 @@ def main():
     print(f"Done — dashboard updated for {today_str}")
 
 if __name__ == "__main__":
-    main()
+    import traceback, sys
+    print(f"API_KEY length: {len(API_KEY)}, starts: {API_KEY[:8] if API_KEY else 'EMPTY'}")
+    try:
+        main()
+    except Exception as e:
+        traceback.print_exc()
+        sys.exit(1)
