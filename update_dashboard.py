@@ -55,7 +55,9 @@ def campaign_series(start, end):
         "timeframe": {"start": iso(start), "end": iso_end(end)},
         "conversion_metric_id": PLACED_ORDER_ID,
         "filter": "equals(messages.channel,'email')",
-        "statistics": ["recipients", "open_rate", "click_rate"],
+        "statistics": [
+            "recipients", "open_rate", "click_rate",
+        ],
         "value_statistics": ["conversion_value", "revenue_per_recipient"],
         "interval": "day",
     }}}
@@ -121,16 +123,17 @@ def build_camp_top(resp, campaign_names):
             "cn":   int(st.get("conversions", 0) or 0),
             "br":   pct(st.get("bounce_rate")),
             "ur":   pct(st.get("unsubscribe_rate")),
-            "cv":   cv, "rpr": rpr,
+            "cv":   cv,
+            "rpr":  rpr,
         })
     rows.sort(key=lambda x: x["cv"], reverse=True)
     return rows[:15]
 
 def build_camp_totals(rows):
     if not rows: return {"tcv":0,"tc":0,"trec":0,"aor":0,"actr":0,"acr":0,"avg_rpr":0,"nc":0}
-    tcv  = round(sum(r["cv"] for r in rows), 2)
-    tc   = sum(r["cn"] for r in rows)
-    trec = sum(r["rc"] for r in rows)
+    tcv  = round(sum(r["cv"]  for r in rows), 2)
+    tc   = sum(r["cn"]  for r in rows)
+    trec = sum(r["rc"]  for r in rows)
     aor  = round(sum(r["opr"]*r["rc"] for r in rows)/trec, 2) if trec else 0
     actr = round(sum(r["ctr"]*r["rc"] for r in rows)/trec, 2) if trec else 0
     acr  = round(tc/trec*100, 3) if trec else 0
@@ -150,15 +153,18 @@ def build_overtime(series_resp):
         daily[dt]["o_sum"] += pct(st.get("open_rate")) * rc
         daily[dt]["c_sum"] += pct(st.get("click_rate")) * rc
         daily[dt]["cnt"]   += rc
+
     dates = sorted(daily.keys())
     d, v, r, o, c, p = [], [], [], [], [], []
     for dt in dates:
         rec = daily[dt]["r"]
         rev = daily[dt]["v"]
-        d.append(dt); v.append(round(rev,2)); r.append(rec)
-        o.append(round(daily[dt]["o_sum"]/rec,1) if rec else 0)
-        c.append(round(daily[dt]["c_sum"]/rec,2) if rec else 0)
-        p.append(round(rev/rec,4) if rec else 0)
+        d.append(dt)
+        v.append(round(rev, 2))
+        r.append(rec)
+        o.append(round(daily[dt]["o_sum"]/rec, 1) if rec else 0)
+        c.append(round(daily[dt]["c_sum"]/rec, 2) if rec else 0)
+        p.append(round(rev/rec, 4) if rec else 0)
     return {"d":d,"v":v,"r":r,"o":o,"c":c,"p":p}
 
 def get_campaign_names(start, end):
@@ -186,11 +192,16 @@ def build_flow_top(resp, flow_names):
         cv  = safe(vst.get("conversion_value", 0), 2)
         rpr = safe(vst.get("revenue_per_recipient", 0))
         rows.append({
-            "name": name, "rc": rc,
-            "opr": pct(st.get("open_rate")), "ctr": pct(st.get("click_rate")),
-            "cvr": pct(st.get("conversion_rate")), "cn": int(st.get("conversions",0) or 0),
-            "cv": cv, "rpr": rpr,
-            "br": pct(st.get("bounce_rate")), "ur": pct(st.get("unsubscribe_rate")),
+            "name": name,
+            "rc":   rc,
+            "opr":  pct(st.get("open_rate")),
+            "ctr":  pct(st.get("click_rate")),
+            "cvr":  pct(st.get("conversion_rate")),
+            "cn":   int(st.get("conversions", 0) or 0),
+            "cv":   cv,
+            "rpr":  rpr,
+            "br":   pct(st.get("bounce_rate")),
+            "ur":   pct(st.get("unsubscribe_rate")),
             "status": "live",
         })
     rows.sort(key=lambda x: x["cv"], reverse=True)
@@ -198,9 +209,9 @@ def build_flow_top(resp, flow_names):
 
 def build_flow_totals(rows):
     if not rows: return {"tcv":0,"tc":0,"trec":0,"aor":0,"actr":0,"acr":0,"avg_rpr":0,"nf":0}
-    tcv  = round(sum(r["cv"] for r in rows), 2)
-    tc   = sum(r["cn"] for r in rows)
-    trec = sum(r["rc"] for r in rows)
+    tcv  = round(sum(r["cv"]  for r in rows), 2)
+    tc   = sum(r["cn"]  for r in rows)
+    trec = sum(r["rc"]  for r in rows)
     aor  = round(sum(r["opr"]*r["rc"] for r in rows)/trec, 2) if trec else 0
     actr = round(sum(r["ctr"]*r["rc"] for r in rows)/trec, 2) if trec else 0
     acr  = round(tc/trec*100, 3) if trec else 0
@@ -291,23 +302,23 @@ def build_yoy(days):
     return {
         "camp_rev":  ct["tcv"],  "flow_rev":  ft["tcv"],
         "camp_conv": ct["tc"],   "flow_conv": ft["tc"],
-        "or":  round(sum(r["opr"]*r["rc"] for r in nc_rows)/trec_c, 2),
-        "cr":  round(sum(r["ctr"]*r["rc"] for r in nc_rows)/trec_c, 2),
-        "rpr": ct["avg_rpr"],
-        "camp_vol": ct["trec"], "flow_vol": ft["trec"],
-        "flow_or":  round(sum(r["opr"]*r["rc"] for r in nf_rows)/trec_f, 2),
-        "flow_rpr": ft["avg_rpr"],
+        "or":        round(sum(r["opr"]*r["rc"] for r in nc_rows)/trec_c, 2),
+        "cr":        round(sum(r["ctr"]*r["rc"] for r in nc_rows)/trec_c, 2),
+        "rpr":       ct["avg_rpr"],
+        "camp_vol":  ct["trec"], "flow_vol":  ft["trec"],
+        "flow_or":   round(sum(r["opr"]*r["rc"] for r in nf_rows)/trec_f, 2),
+        "flow_rpr":  ft["avg_rpr"],
     }
 
 def build_period(days):
-    s, e    = period_dates(days)
-    c_resp  = campaign_report(s, e)
+    s, e   = period_dates(days)
+    c_resp = campaign_report(s, e)
     cs_resp = campaign_series(s, e)
-    f_resp  = flow_report(s, e)
-    fn      = get_flow_names()
-    cn      = get_campaign_names(s, e)
-    c_rows  = build_camp_top(c_resp, cn)
-    f_rows  = build_flow_top(f_resp, fn)
+    f_resp = flow_report(s, e)
+    fn     = get_flow_names()
+    cn     = get_campaign_names(s, e)
+    c_rows = build_camp_top(c_resp, cn)
+    f_rows = build_flow_top(f_resp, fn)
     return {
         "camps": {
             "top":      c_rows,
@@ -321,10 +332,12 @@ def build_period(days):
     }
 
 def build_lgdata():
+    # 14 weeks back from last Sunday
     end   = TODAY - timedelta(days=TODAY.weekday()+1)
     start = end - timedelta(weeks=14) + timedelta(days=1)
     sub_vals   = get_weekly_counts(SUBSCRIBED_ID,   start, end)
     unsub_vals = get_weekly_counts(UNSUBSCRIBED_ID, start, end)
+    # Pad/trim to 14 weeks
     def normalise(lst):
         if len(lst) >= 14: return lst[-14:]
         return [0]*(14-len(lst)) + lst
@@ -377,7 +390,11 @@ def main():
     spam, flowvol = build_spam_flowvol()
     wk = build_wk_labels()
 
-    data_js = {"l28d": l28d, "l60d": l60d, "l90d": l90d}
+    data_js = {
+        "l28d": l28d,
+        "l60d": l60d,
+        "l90d": l90d,
+    }
 
     with open("index.html", "r", encoding="utf-8") as f:
         html = f.read()
