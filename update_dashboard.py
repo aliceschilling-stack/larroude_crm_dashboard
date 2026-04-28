@@ -228,20 +228,43 @@ def build_prior(days):
     f_resp = flow_report(s, e)
     fn     = get_flow_names()
     cn     = get_campaign_names(s, e)
-    c_rows = build_camp_top(c_resp, cn)
+
+    all_c_rows = []
+    for item in (c_resp.get("data") or []):
+        g   = item.get("groupings", {})
+        st  = item.get("statistics", {})
+        vst = item.get("value_statistics", {})
+        cid = g.get("campaign_id", "")
+        rc  = int(st.get("recipients", 0) or 0)
+        if rc == 0: continue
+        all_c_rows.append({
+            "name": cn.get(cid, cid),
+            "rc":   rc,
+            "opr":  pct(st.get("open_rate")),
+            "ctr":  pct(st.get("click_rate")),
+            "cvr":  pct(st.get("conversion_rate")),
+            "cn":   int(st.get("conversions", 0) or 0),
+            "br":   pct(st.get("bounce_rate")),
+            "ur":   pct(st.get("unsubscribe_rate")),
+            "cv":   safe(vst.get("conversion_value", 0), 2),
+            "rpr":  safe(vst.get("revenue_per_recipient", 0)),
+        })
+
+    c_rows = sorted(all_c_rows, key=lambda x: x["cv"], reverse=True)[:15]
     f_rows = build_flow_top(f_resp, fn)
     ct = build_camp_totals(c_rows)
     ft = build_flow_totals(f_rows)
-    no_cs  = lambda rows: [r for r in rows if not re.search(r'\bcs\b| - cs ', r["name"], re.I)]
-    nc_rows = no_cs(c_rows)
+
+    no_cs   = lambda rows: [r for r in rows if not re.search(r'\bcs\b| - cs ', r["name"], re.I)]
+    nc_all  = no_cs(all_c_rows)
     nf_rows = no_cs(f_rows)
-    trec_c = sum(r["rc"] for r in nc_rows) or 1
-    trec_f = sum(r["rc"] for r in nf_rows) or 1
+    trec_c  = sum(r["rc"] for r in nc_all) or 1
+    trec_f  = sum(r["rc"] for r in nf_rows) or 1
     return {
         "camp_rev":  ct["tcv"],  "flow_rev":  ft["tcv"],
         "camp_conv": ct["tc"],   "flow_conv": ft["tc"],
-        "or":   round(sum(r["opr"]*r["rc"] for r in nc_rows)/trec_c, 2),
-        "cr":   round(sum(r["ctr"]*r["rc"] for r in nc_rows)/trec_c, 2),
+        "or":   round(sum(r["opr"]*r["rc"] for r in nc_all)/trec_c, 2),
+        "cr":   round(sum(r["ctr"]*r["rc"] for r in nc_all)/trec_c, 2),
         "rpr":  ct["avg_rpr"],
         "camp_vol": ct["trec"], "flow_vol": ft["trec"],
         "flow_or":  round(sum(r["opr"]*r["rc"] for r in nf_rows)/trec_f, 2),
