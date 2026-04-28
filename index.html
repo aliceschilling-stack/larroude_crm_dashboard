@@ -287,11 +287,9 @@ function render(){
   const flags=computeRedFlags(d,rawOt);
   $('flags-wrap').innerHTML='<div class="flags-panel">'+flags.map(f=>'<div class="flag-item '+f.cls+'">'+f.msg+'</div>').join('')+'</div>';
 
-  // Weighted CTR and OR — recipients-weighted, CS excluded
-  const noCScamps=camps.top.filter(c=>noCS(c.name));
-  const totalRecC=noCScamps.reduce((s,c)=>s+c.rc,0);
-  const wCTRC=totalRecC>0?noCScamps.reduce((s,c)=>s+c.rc*c.ctr/100,0)/totalRecC*100:0;
-  const wORC=totalRecC>0?noCScamps.reduce((s,c)=>s+c.rc*c.opr/100,0)/totalRecC*100:0;
+  // Weighted CTR and OR — recipients-weighted, CS excluded, all campaigns (not just top-15)
+  const wCTRC=camps.totals.nc_actr||0;
+  const wORC=camps.totals.nc_aor||0;
 
   const noCSflows=flows.top.filter(f=>noCS(f.name));
   const totalRecF=noCSflows.reduce((s,f)=>s+f.rc,0);
