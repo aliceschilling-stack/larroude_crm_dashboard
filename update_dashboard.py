@@ -474,10 +474,17 @@ def main():
     print(f"Done — dashboard updated for {today_str}")
 
 if __name__ == "__main__":
-    import traceback, sys
-    print(f"API_KEY length: {len(API_KEY)}, starts: {API_KEY[:8] if API_KEY else 'EMPTY'}")
+    import traceback, sys, subprocess
+    key_info = f"len={len(API_KEY)}, repr={repr(API_KEY[:12])}"
+    print(f"API_KEY: {key_info}")
     try:
         main()
+        if os.path.exists("script_error.txt"):
+            os.remove("script_error.txt")
     except Exception as e:
-        traceback.print_exc()
-        sys.exit(1)
+        err = traceback.format_exc()
+        print(err, flush=True)
+        with open("script_error.txt", "w") as f:
+            f.write(f"API_KEY: {key_info}\n\n{err}")
+        subprocess.run(["git", "add", "script_error.txt"])
+        # exit 0 so commit step runs and publishes the error file
