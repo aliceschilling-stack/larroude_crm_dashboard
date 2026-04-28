@@ -37,7 +37,7 @@ def campaign_report(start, end):
     payload = {"data": {"type": "campaign-values-report", "attributes": {
         "timeframe": {"start": iso(start), "end": iso_end(end)},
         "conversion_metric_id": PLACED_ORDER_ID,
-        "filter": "equals(messages.channel,'email')",
+        "filter": "equals(send_channel,'email')",
         "statistics": [
             "recipients", "open_rate", "click_rate", "conversion_rate",
             "conversions", "bounce_rate", "unsubscribe_rate",
@@ -53,7 +53,7 @@ def campaign_series(start, end):
     payload = {"data": {"type": "campaign-series-report", "attributes": {
         "timeframe": {"start": iso(start), "end": iso_end(end)},
         "conversion_metric_id": PLACED_ORDER_ID,
-        "filter": "equals(messages.channel,'email')",
+        "filter": "equals(send_channel,'email')",
         "statistics": [
             "recipients", "open_rate", "click_rate",
         ],
@@ -68,7 +68,7 @@ def flow_report(start, end):
     payload = {"data": {"type": "flow-values-report", "attributes": {
         "timeframe": {"start": iso(start), "end": iso_end(end)},
         "conversion_metric_id": PLACED_ORDER_ID,
-        "filter": "equals(messages.channel,'email')",
+        "filter": "equals(send_channel,'email')",
         "statistics": [
             "recipients", "open_rate", "click_rate", "conversion_rate",
             "conversions", "bounce_rate", "unsubscribe_rate",
