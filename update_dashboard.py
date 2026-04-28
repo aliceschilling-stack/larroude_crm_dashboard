@@ -472,4 +472,14 @@ def main():
     print(f"Done — dashboard updated for {today_str}")
 
 if __name__ == "__main__":
-    main()
+    import traceback, subprocess
+    try:
+        main()
+        if os.path.exists("script_error.txt"):
+            os.remove("script_error.txt")
+    except Exception:
+        err = traceback.format_exc()
+        print(err, flush=True)
+        with open("script_error.txt", "w") as f:
+            f.write(err)
+        subprocess.run(["git", "add", "script_error.txt"])
