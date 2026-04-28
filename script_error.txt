@@ -1,14 +1,12 @@
 Traceback (most recent call last):
-  File "/home/runner/work/larroude_crm_dashboard/larroude_crm_dashboard/update_dashboard.py", line 477, in <module>
+  File "/home/runner/work/larroude_crm_dashboard/larroude_crm_dashboard/update_dashboard.py", line 482, in <module>
     main()
-  File "/home/runner/work/larroude_crm_dashboard/larroude_crm_dashboard/update_dashboard.py", line 419, in main
+  File "/home/runner/work/larroude_crm_dashboard/larroude_crm_dashboard/update_dashboard.py", line 424, in main
     l28d = build_period(28)
            ^^^^^^^^^^^^^^^^
-  File "/home/runner/work/larroude_crm_dashboard/larroude_crm_dashboard/update_dashboard.py", line 335, in build_period
-    c_resp = campaign_report(s, e)
-             ^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/larroude_crm_dashboard/larroude_crm_dashboard/update_dashboard.py", line 49, in campaign_report
-    r.raise_for_status()
-  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/requests/models.py", line 1028, in raise_for_status
-    raise HTTPError(http_error_msg, response=self)
-requests.exceptions.HTTPError: 400 Client Error: Bad Request for url: https://a.klaviyo.com/api/campaign-values-reports/
+  File "/home/runner/work/larroude_crm_dashboard/larroude_crm_dashboard/update_dashboard.py", line 341, in build_period
+    cs_resp = campaign_series(s, e)
+              ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/larroude_crm_dashboard/larroude_crm_dashboard/update_dashboard.py", line 64, in campaign_series
+    raise RuntimeError(f"campaign-series-reports {r.status_code}: {r.text[:3000]}")
+RuntimeError: campaign-series-reports 404: {"errors": [{"id": "a5b7a6ef-36af-48cf-bab8-2ef81a06c851", "status": 404, "code": "not_found", "title": "Not found", "detail": "The path /api/campaign-series-reports/ could not be found"}]}
