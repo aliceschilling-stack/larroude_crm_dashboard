@@ -46,7 +46,8 @@ def campaign_report(start, end):
         "group_by": ["campaign_id", "campaign_message_id", "send_channel"],
     }}}
     r = requests.post(f"{BASE}/campaign-values-reports/", headers=HEADERS, json=payload)
-    r.raise_for_status()
+    if not r.ok:
+        raise RuntimeError(f"campaign-values-reports {r.status_code}: {r.text[:3000]}")
     return r.json()
 
 def campaign_series(start, end):
@@ -61,7 +62,8 @@ def campaign_series(start, end):
         "interval": "day",
     }}}
     r = requests.post(f"{BASE}/campaign-series-reports/", headers=HEADERS, json=payload)
-    r.raise_for_status()
+    if not r.ok:
+        raise RuntimeError(f"campaign-series-reports {r.status_code}: {r.text[:3000]}")
     return r.json()
 
 def flow_report(start, end):
@@ -77,7 +79,8 @@ def flow_report(start, end):
         "group_by": ["flow_id", "send_channel"],
     }}}
     r = requests.post(f"{BASE}/flow-values-reports/", headers=HEADERS, json=payload)
-    r.raise_for_status()
+    if not r.ok:
+        raise RuntimeError(f"flow-values-reports {r.status_code}: {r.text[:3000]}")
     return r.json()
 
 def metric_agg_weekly(metric_id, start, end):
