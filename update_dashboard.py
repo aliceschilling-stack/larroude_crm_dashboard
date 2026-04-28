@@ -44,7 +44,6 @@ def campaign_report(start, end):
         ],
         "value_statistics": ["conversion_value", "revenue_per_recipient"],
         "group_by": ["campaign_id", "campaign_message_id", "send_channel"],
-        "sort": "-conversion_value",
     }}}
     r = requests.post(f"{BASE}/campaign-values-reports/", headers=HEADERS, json=payload)
     r.raise_for_status()
@@ -76,7 +75,6 @@ def flow_report(start, end):
         ],
         "value_statistics": ["conversion_value", "revenue_per_recipient"],
         "group_by": ["flow_id", "send_channel"],
-        "sort": "-conversion_value",
     }}}
     r = requests.post(f"{BASE}/flow-values-reports/", headers=HEADERS, json=payload)
     r.raise_for_status()
@@ -474,17 +472,4 @@ def main():
     print(f"Done — dashboard updated for {today_str}")
 
 if __name__ == "__main__":
-    import traceback, sys, subprocess
-    key_info = f"len={len(API_KEY)}, repr={repr(API_KEY[:12])}"
-    print(f"API_KEY: {key_info}")
-    try:
-        main()
-        if os.path.exists("script_error.txt"):
-            os.remove("script_error.txt")
-    except Exception as e:
-        err = traceback.format_exc()
-        print(err, flush=True)
-        with open("script_error.txt", "w") as f:
-            f.write(f"API_KEY: {key_info}\n\n{err}")
-        subprocess.run(["git", "add", "script_error.txt"])
-        # exit 0 so commit step runs and publishes the error file
+    main()
