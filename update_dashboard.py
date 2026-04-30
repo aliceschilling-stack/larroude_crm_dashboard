@@ -4,9 +4,41 @@ Larroudé CRM Dashboard — Auto Updater
 Fetches Klaviyo data for L28D, L60D, L90D and updates index.html
 """
 
-import os, json, re, requests
+import os, json, re, time, requests
 from datetime import date, timedelta
 from collections import defaultdict
+
+def _post(url, **kwargs):
+    for attempt in range(6):
+        try:
+            r = requests.post(url, **kwargs)
+            if r.status_code == 429:
+                wait = int(r.headers.get("Retry-After", 20))
+                print(f"  rate-limited, waiting {wait}s…")
+                time.sleep(wait)
+                continue
+            return r
+        except requests.exceptions.ConnectionError:
+            wait = 10 * (attempt + 1)
+            print(f"  connection error, retrying in {wait}s…")
+            time.sleep(wait)
+    raise RuntimeError(f"Failed after retries: POST {url}")
+
+def _get(url, **kwargs):
+    for attempt in range(6):
+        try:
+            r = requests.get(url, **kwargs)
+            if r.status_code == 429:
+                wait = int(r.headers.get("Retry-After", 20))
+                print(f"  rate-limited, waiting {wait}s…")
+                time.sleep(wait)
+                continue
+            return r
+        except requests.exceptions.ConnectionError:
+            wait = 10 * (attempt + 1)
+            print(f"  connection error, retrying in {wait}s…")
+            time.sleep(wait)
+    raise RuntimeError(f"Failed after retries: GET {url}")
 
 API_KEY = os.environ["KLAVIYO_API_KEY"].strip()
 BASE    = "https://a.klaviyo.com/api"
@@ -44,10 +76,12 @@ def campaign_report(start, end):
         ],
         "group_by": ["campaign_id", "campaign_message_id", "send_channel"],
     }}}
-    r = requests.post(f"{BASE}/campaign-values-reports/", headers=HEADERS, json=payload)
+    r = _post(f"{BASE}/campaign-values-reports/", headers=HEADERS, json=payload)
     if not r.ok:
         raise RuntimeError(f"campaign-values-reports {r.status_code}: {r.text[:3000]}")
-    return r.json()
+    body = r.json()
+    results = body.get("data", {}).get("attributes", {}).get("results") or body.get("data") or []
+    return {"data": results}
 
 def campaign_series(start, end):
     payload = {"data": {"type": "campaign-series-report", "attributes": {
@@ -59,7 +93,9 @@ def campaign_series(start, end):
         ],
         "interval": "day",
     }}}
-    r = requests.post(f"{BASE}/campaign-series-reports/", headers=HEADERS, json=payload)
+    r = _post(f"{BASE}/campaign-series-reports/", headers=HEADERS, json=payload)
+    if r.status_code == 404:
+        return {"data": []}  # endpoint indisponível nesta conta/revisão
     if not r.ok:
         raise RuntimeError(f"campaign-series-reports {r.status_code}: {r.text[:3000]}")
     return r.json()
@@ -73,21 +109,23 @@ def flow_report(start, end):
             "conversions", "bounce_rate", "unsubscribe_rate",
             "conversion_value", "revenue_per_recipient",
         ],
-        "group_by": ["flow_id", "send_channel"],
+        "group_by": ["flow_id", "flow_message_id", "send_channel"],
     }}}
-    r = requests.post(f"{BASE}/flow-values-reports/", headers=HEADERS, json=payload)
+    r = _post(f"{BASE}/flow-values-reports/", headers=HEADERS, json=payload)
     if not r.ok:
         raise RuntimeError(f"flow-values-reports {r.status_code}: {r.text[:3000]}")
-    return r.json()
+    body = r.json()
+    results = body.get("data", {}).get("attributes", {}).get("results") or body.get("data") or []
+    return {"data": results}
 
 def metric_agg_weekly(metric_id, start, end):
     payload = {"data": {"type": "metric-aggregate", "attributes": {
         "metric_id": metric_id,
         "measurements": ["count"],
         "interval": "week",
-        "timeframe": {"start": iso(start), "end": iso_end(end)},
+        "filter": f"greater-or-equal(datetime,{iso(start)}),less-than(datetime,{iso_end(end)})",
     }}}
-    r = requests.post(f"{BASE}/metric-aggregates/", headers=HEADERS, json=payload)
+    r = _post(f"{BASE}/metric-aggregates/", headers=HEADERS, json=payload)
     r.raise_for_status()
     return r.json()
 
@@ -167,18 +205,32 @@ def build_overtime(series_resp):
 
 def get_campaign_names(start, end):
     params = {
-        "filter": f"greater-or-equal(send_time,{iso(start)}),less-or-equal(send_time,{iso_end(end)})",
-        "fields[campaign]": "name,send_time",
+        "filter": "equals(messages.channel,'email')",
+        "fields[campaign]": "name,scheduled_at",
+        "sort": "-scheduled_at",
     }
-    r = requests.get(f"{BASE}/campaigns/", headers=HEADERS, params=params)
-    r.raise_for_status()
     info = {}
-    for item in r.json().get("data", []):
-        attrs = item["attributes"]
-        info[item["id"]] = {
-            "name": attrs.get("name", item["id"]),
-            "st":   (attrs.get("send_time") or "")[:10],
-        }
+    url = f"{BASE}/campaigns/"
+    start_s, end_s = str(start), str(end)
+    while url:
+        r = _get(url, headers=HEADERS, params=params)
+        r.raise_for_status()
+        body = r.json()
+        found_older = False
+        for item in body.get("data", []):
+            attrs = item["attributes"]
+            st = (attrs.get("scheduled_at") or "")[:10]
+            if st < start_s:
+                found_older = True
+                continue
+            if st <= end_s:
+                info[item["id"]] = {
+                    "name": attrs.get("name", item["id"]),
+                    "st":   st,
+                }
+        next_url = body.get("links", {}).get("next")
+        url = None if (not next_url or found_older) else next_url
+        params = {}
     return info
 
 def build_flow_top(resp, flow_names):
@@ -220,7 +272,7 @@ def build_flow_totals(rows):
     return {"tcv":tcv,"tc":tc,"trec":trec,"aor":aor,"actr":actr,"acr":acr,"avg_rpr":avg_rpr,"nf":len(rows)}
 
 def get_flow_names():
-    r = requests.get(f"{BASE}/flows/", headers=HEADERS, params={"fields[flow]":"name"})
+    r = _get(f"{BASE}/flows/", headers=HEADERS, params={"fields[flow]":"name"})
     r.raise_for_status()
     names = {}
     for item in r.json().get("data", []):
@@ -229,10 +281,12 @@ def get_flow_names():
 
 def get_weekly_counts(metric_id, start, end):
     resp = metric_agg_weekly(metric_id, start, end)
-    vals = []
-    for item in (resp.get("data", {}).get("attributes", {}).get("dates", []) or []):
-        vals.append(int(item.get("values", [0])[0] or 0))
-    return vals
+    attrs = resp.get("data", {}).get("attributes", {})
+    # New API: attrs["data"][0]["measurements"]["count"] is a list per week
+    data_rows = attrs.get("data", [])
+    if data_rows:
+        return [int(v or 0) for v in data_rows[0].get("measurements", {}).get("count", [])]
+    return []
 
 def build_prior(days):
     s, e = period_dates(days, offset=days)
@@ -422,10 +476,13 @@ def build_wk_labels():
 def main():
     print("Fetching L28D…")
     l28d = build_period(28)
+    time.sleep(3)
     print("Fetching L60D…")
     l60d = build_period(60)
+    time.sleep(3)
     print("Fetching L90D…")
     l90d = build_period(90)
+    time.sleep(3)
 
     print("Fetching PRIOR periods…")
     prior = {
@@ -456,6 +513,14 @@ def main():
         html = f.read()
 
     today_str = TODAY.strftime("%b %d %Y").upper()
+    today_display = TODAY.strftime("%b %d, %Y").upper()
+    # Update <span class="updated">...</span> timestamp
+    html = re.sub(
+        r'(<span class="updated">)[^<]*(</span>)',
+        rf'\g<1>{today_display} — updated\g<2>',
+        html,
+    )
+    # Legacy DATA: pattern (fallback)
     html = re.sub(r'DATA:\s*[A-Z]{3}\s+\d+\s+\d+', f'DATA: {today_str}', html)
 
     def replace_var(src, name, value):
