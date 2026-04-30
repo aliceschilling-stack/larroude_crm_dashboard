@@ -9,4 +9,4 @@ Traceback (most recent call last):
               ^^^^^^^^^^^^^^^^^^^^^
   File "/home/runner/work/larroude_crm_dashboard/larroude_crm_dashboard/update_dashboard.py", line 64, in campaign_series
     raise RuntimeError(f"campaign-series-reports {r.status_code}: {r.text[:3000]}")
-RuntimeError: campaign-series-reports 404: {"errors": [{"id": "d392d010-4841-4253-ac3d-b655e73c1ae2", "status": 404, "code": "not_found", "title": "Not found", "detail": "The path /api/campaign-series-reports/ could not be found"}]}
+RuntimeError: campaign-series-reports 404: {"errors": [{"id": "139a1e31-dc4b-4861-a0eb-e9d2f3175c48", "status": 404, "code": "not_found", "title": "Not found", "detail": "The path /api/campaign-series-reports/ could not be found"}]}
