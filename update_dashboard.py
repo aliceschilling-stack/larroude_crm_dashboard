@@ -57,6 +57,20 @@ HEADERS = {
 
 TODAY = date.today()
 
+# ── Freshness guard ──────────────────────────────────────────────────────────
+# If index.html already contains today's date (meaning the local refresh job
+# already pushed a fresh version), skip this run so we don't overwrite it
+# with the simplified template.
+import os as _os, pathlib as _pathlib
+_idx = _pathlib.Path("index.html")
+if _idx.exists():
+    _content = _idx.read_text(errors="ignore")
+    _today_str = TODAY.strftime("%b %d, %Y").upper()  # e.g. MAY 05, 2026
+    if _today_str in _content:
+        print(f"✓ index.html already contains {_today_str} — skipping update (local job already ran).")
+        raise SystemExit(0)
+# ─────────────────────────────────────────────────────────────────────────────
+
 def iso(d): return d.isoformat() + "T00:00:00Z"
 def iso_end(d): return d.isoformat() + "T23:59:59Z"
 
@@ -389,6 +403,36 @@ def build_yoy(days):
         "flow_rpr":  ft["avg_rpr"],
     }
 
+def build_overtime_from_rows(c_resp, cn, start, end):
+    """Build daily overtime by grouping campaigns from c_resp by their send date.
+    Used as fallback when campaign-series-reports endpoint is unavailable (404).
+    Each day's revenue = sum of conversion_value of campaigns sent that day."""
+    daily = defaultdict(lambda: {"v":0.0, "r":0, "o_sum":0.0, "c_sum":0.0})
+    for item in (c_resp.get("data") or []):
+        g  = item.get("groupings", {})
+        st = item.get("statistics", {})
+        cid   = g.get("campaign_id", "")
+        cinfo = cn.get(cid, {})
+        send_date = cinfo.get("st", "") if isinstance(cinfo, dict) else ""
+        rc = int(st.get("recipients", 0) or 0)
+        if rc == 0 or not send_date: continue
+        daily[send_date]["v"]     += safe(st.get("conversion_value", 0), 2)
+        daily[send_date]["r"]     += rc
+        daily[send_date]["o_sum"] += pct(st.get("open_rate")) * rc
+        daily[send_date]["c_sum"] += pct(st.get("click_rate")) * rc
+    d, v, r, o, c, p = [], [], [], [], [], []
+    for dt in sorted(daily.keys()):
+        rec = daily[dt]["r"]
+        if rec < 1000: continue
+        rev = daily[dt]["v"]
+        d.append(dt)
+        v.append(round(rev, 2))
+        r.append(rec)
+        o.append(round(daily[dt]["o_sum"]/rec, 1))
+        c.append(round(daily[dt]["c_sum"]/rec, 2))
+        p.append(round(rev/rec, 4))
+    return {"d":d,"v":v,"r":r,"o":o,"c":c,"p":p}
+
 def build_period(days):
     s, e   = period_dates(days)
     c_resp = campaign_report(s, e)
@@ -429,10 +473,15 @@ def build_period(days):
     ct["nc_actr"] = round(sum(r["ctr"]*r["rc"] for r in nc_all)/trec_nc, 2)
     ct["nc_aor"]  = round(sum(r["opr"]*r["rc"] for r in nc_all)/trec_nc, 2)
 
+    overtime = build_overtime(cs_resp)
+    if not overtime.get("d"):
+        print(f"  series unavailable, building overtime from campaign send dates for {days}d…")
+        overtime = build_overtime_from_rows(c_resp, cn, s, e)
+
     return {
         "camps": {
             "top":      c_rows,
-            "overtime": build_overtime(cs_resp),
+            "overtime": overtime,
             "totals":   ct,
         },
         "flows": {
@@ -474,6 +523,9 @@ def build_wk_labels():
     return labels
 
 def main():
+    print("Fetching L7D…")
+    l7d = build_period(7)
+    time.sleep(3)
     print("Fetching L28D…")
     l28d = build_period(28)
     time.sleep(3)
@@ -486,6 +538,7 @@ def main():
 
     print("Fetching PRIOR periods…")
     prior = {
+        "l7d":  build_prior(7),
         "l28d": build_prior(28),
         "l60d": build_prior(60),
         "l90d": build_prior(90),
@@ -493,6 +546,7 @@ def main():
 
     print("Fetching YoY periods…")
     yoy = {
+        "l7d":  build_yoy(7),
         "l28d": build_yoy(28),
         "l60d": build_yoy(60),
         "l90d": build_yoy(90),
@@ -504,6 +558,7 @@ def main():
     wk = build_wk_labels()
 
     data_js = {
+        "l7d":  l7d,
         "l28d": l28d,
         "l60d": l60d,
         "l90d": l90d,
@@ -524,9 +579,12 @@ def main():
     html = re.sub(r'DATA:\s*[A-Z]{3}\s+\d+\s+\d+', f'DATA: {today_str}', html)
 
     def replace_var(src, name, value):
-        pattern = rf'const {name}=.*?;'
-        replacement = f'const {name}={json.dumps(value, separators=(",",":"))};'
-        return re.sub(pattern, lambda _: replacement, src, count=1, flags=re.DOTALL)
+        pattern = rf'const {name}\s*=.*?;'
+        replacement = f'const {name} = {json.dumps(value, separators=(",",":"))};'
+        new_src, n = re.subn(pattern, lambda _: replacement, src, count=1, flags=re.DOTALL)
+        if n == 0:
+            print(f"  WARNING: pattern for const {name} not found — value not substituted")
+        return new_src
 
     html = replace_var(html, "DATA",    data_js)
     html = replace_var(html, "PRIOR",   prior)
