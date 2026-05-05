@@ -1,16 +1,30 @@
 name: Update CRM Dashboard
 
-# Disabled — dashboard is now generated locally by refresh_cowork.py
-# and pushed to this repo via run_all_dashboards.sh (launchd nightly job).
-# The old update_dashboard.py used a simplified template and was overwriting
-# the full dashboard. Re-enable only if moving generation to GitHub Actions.
-
 on:
-  workflow_dispatch:   # manual trigger only — no schedule
+  schedule:
+    - cron: "0 13 * * *"   # 9am EST todo dia
+  workflow_dispatch:
 
 jobs:
   update:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Skipped
-        run: echo "Automatic generation disabled — dashboard pushed from local machine."
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install requests
+      - name: Update dashboard data
+        env:
+          KLAVIYO_API_KEY: ${{ secrets.KLAVIYO_API_KEY }}
+        run: python update_dashboard.py
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --cached --quiet || git commit -m "Auto-update dashboard $(date +'%Y-%m-%d')"
+          git push
