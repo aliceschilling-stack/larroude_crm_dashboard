@@ -247,7 +247,9 @@ def get_campaign_names(start, end):
         params = {}
     return info
 
-def build_flow_top(resp, flow_names):
+def build_flow_rows(resp, flow_names):
+    """All flow rows sorted desc by conversion_value (no truncation).
+    Caller slices [:15] for display; totals use full list."""
     rows = []
     for item in (resp.get("data") or []):
         g   = item.get("groupings", {})
@@ -272,7 +274,7 @@ def build_flow_top(resp, flow_names):
             "status": "live",
         })
     rows.sort(key=lambda x: x["cv"], reverse=True)
-    return rows[:15]
+    return rows
 
 def build_flow_totals(rows):
     if not rows: return {"tcv":0,"tc":0,"trec":0,"aor":0,"actr":0,"acr":0,"avg_rpr":0,"nf":0}
@@ -331,16 +333,15 @@ def build_prior(days):
             "rpr":  safe(st.get("revenue_per_recipient", 0)),
         })
 
-    c_rows = sorted(all_c_rows, key=lambda x: x["cv"], reverse=True)[:15]
-    f_rows = build_flow_top(f_resp, fn)
-    ct = build_camp_totals(c_rows)
-    ft = build_flow_totals(f_rows)
+    all_f_rows = build_flow_rows(f_resp, fn)
+    ct = build_camp_totals(all_c_rows)
+    ft = build_flow_totals(all_f_rows)
 
-    no_cs   = lambda rows: [r for r in rows if not re.search(r'\bcs\b| - cs ', r["name"], re.I)]
-    nc_all  = no_cs(all_c_rows)
-    nf_rows = no_cs(f_rows)
-    trec_c  = sum(r["rc"] for r in nc_all) or 1
-    trec_f  = sum(r["rc"] for r in nf_rows) or 1
+    no_cs    = lambda rows: [r for r in rows if not re.search(r'\bcs\b| - cs ', r["name"], re.I)]
+    nc_all   = no_cs(all_c_rows)
+    nf_all   = no_cs(all_f_rows)
+    trec_c   = sum(r["rc"] for r in nc_all) or 1
+    trec_f   = sum(r["rc"] for r in nf_all) or 1
     return {
         "camp_rev":  ct["tcv"],  "flow_rev":  ft["tcv"],
         "camp_conv": ct["tc"],   "flow_conv": ft["tc"],
@@ -348,7 +349,7 @@ def build_prior(days):
         "cr":   round(sum(r["ctr"]*r["rc"] for r in nc_all)/trec_c, 2),
         "rpr":  ct["avg_rpr"],
         "camp_vol": ct["trec"], "flow_vol": ft["trec"],
-        "flow_or":  round(sum(r["opr"]*r["rc"] for r in nf_rows)/trec_f, 2),
+        "flow_or":  round(sum(r["opr"]*r["rc"] for r in nf_all)/trec_f, 2),
         "flow_rpr": ft["avg_rpr"],
     }
 
@@ -383,15 +384,14 @@ def build_yoy(days):
             "rpr":  safe(st.get("revenue_per_recipient", 0)),
         })
 
-    c_rows = sorted(all_c_rows, key=lambda x: x["cv"], reverse=True)[:15]
-    f_rows = build_flow_top(f_resp, fn)
-    ct = build_camp_totals(c_rows)
-    ft = build_flow_totals(f_rows)
-    no_cs   = lambda rows: [r for r in rows if not re.search(r'\bcs\b| - cs ', r["name"], re.I)]
-    nc_all  = no_cs(all_c_rows)
-    nf_rows = no_cs(f_rows)
-    trec_c  = sum(r["rc"] for r in nc_all) or 1
-    trec_f  = sum(r["rc"] for r in nf_rows) or 1
+    all_f_rows = build_flow_rows(f_resp, fn)
+    ct = build_camp_totals(all_c_rows)
+    ft = build_flow_totals(all_f_rows)
+    no_cs    = lambda rows: [r for r in rows if not re.search(r'\bcs\b| - cs ', r["name"], re.I)]
+    nc_all   = no_cs(all_c_rows)
+    nf_all   = no_cs(all_f_rows)
+    trec_c   = sum(r["rc"] for r in nc_all) or 1
+    trec_f   = sum(r["rc"] for r in nf_all) or 1
     return {
         "camp_rev":  ct["tcv"],  "flow_rev":  ft["tcv"],
         "camp_conv": ct["tc"],   "flow_conv": ft["tc"],
@@ -399,7 +399,7 @@ def build_yoy(days):
         "cr":        round(sum(r["ctr"]*r["rc"] for r in nc_all)/trec_c, 2),
         "rpr":       ct["avg_rpr"],
         "camp_vol":  ct["trec"], "flow_vol":  ft["trec"],
-        "flow_or":   round(sum(r["opr"]*r["rc"] for r in nf_rows)/trec_f, 2),
+        "flow_or":   round(sum(r["opr"]*r["rc"] for r in nf_all)/trec_f, 2),
         "flow_rpr":  ft["avg_rpr"],
     }
 
@@ -463,9 +463,10 @@ def build_period(days):
             "rpr":  safe(st.get("revenue_per_recipient", 0)),
         })
 
-    c_rows = sorted(all_c_rows, key=lambda x: x["cv"], reverse=True)[:15]
-    f_rows = build_flow_top(f_resp, fn)
-    ct = build_camp_totals(c_rows)
+    c_rows_top = sorted(all_c_rows, key=lambda x: x["cv"], reverse=True)[:15]
+    all_f_rows = build_flow_rows(f_resp, fn)
+    f_rows_top = all_f_rows[:15]
+    ct = build_camp_totals(all_c_rows)
 
     no_cs  = lambda rows: [r for r in rows if not re.search(r'\bcs\b| - cs ', r["name"], re.I)]
     nc_all = no_cs(all_c_rows)
@@ -480,13 +481,13 @@ def build_period(days):
 
     return {
         "camps": {
-            "top":      c_rows,
+            "top":      c_rows_top,
             "overtime": overtime,
             "totals":   ct,
         },
         "flows": {
-            "top":    f_rows,
-            "totals": build_flow_totals(f_rows),
+            "top":    f_rows_top,
+            "totals": build_flow_totals(all_f_rows),
         },
     }
 
