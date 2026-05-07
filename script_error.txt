@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/Users/aliceschilling/Claude/larroude_crm_dashboard/update_dashboard.py", line 607, in <module>
+    main()
+  File "/Users/aliceschilling/Claude/larroude_crm_dashboard/update_dashboard.py", line 529, in main
+    l7d = build_period(7)
+  File "/Users/aliceschilling/Claude/larroude_crm_dashboard/update_dashboard.py", line 439, in build_period
+    c_resp = campaign_report(s, e)
+  File "/Users/aliceschilling/Claude/larroude_crm_dashboard/update_dashboard.py", line 96, in campaign_report
+    raise RuntimeError(f"campaign-values-reports {r.status_code}: {r.text[:3000]}")
+RuntimeError: campaign-values-reports 401: {"errors":[{"id":"2541cbe9-89f4-4757-b42b-a9a2c0dba7ae","status":401,"code":"not_authenticated","title":"Authentication credentials were not provided.","detail":"Missing or invalid private key.","source":{"pointer":"/data/"}}]}

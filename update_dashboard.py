@@ -60,14 +60,15 @@ TODAY = date.today()
 # ── Freshness guard ──────────────────────────────────────────────────────────
 # If index.html already contains today's date (meaning the local refresh job
 # already pushed a fresh version), skip this run so we don't overwrite it
-# with the simplified template.
-import os as _os, pathlib as _pathlib
+# with the simplified template.  Pass --force to bypass.
+import os as _os, pathlib as _pathlib, sys as _sys
+_force = "--force" in _sys.argv
 _idx = _pathlib.Path("index.html")
-if _idx.exists():
+if not _force and _idx.exists():
     _content = _idx.read_text(errors="ignore")
     _today_str = TODAY.strftime("%b %d, %Y").upper()  # e.g. MAY 05, 2026
     if _today_str in _content:
-        print(f"✓ index.html already contains {_today_str} — skipping update (local job already ran).")
+        print(f"✓ index.html already contains {_today_str} — skipping update (local job already ran). Use --force to override.")
         raise SystemExit(0)
 # ─────────────────────────────────────────────────────────────────────────────
 
