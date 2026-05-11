@@ -152,7 +152,7 @@ tbody td{padding:6px 9px;color:#333}
 <div class="card tall"><div class="card-title">RPR by Flow (Top 10)</div><canvas id="ch-flow-rpr-ot"></canvas></div>
 </div>
 <div class="section-sep">Email Revenue vs Shopify Revenue — Weekly (L90D)</div>
-<div class="note-card">&#128202; Shopify Total = all store orders &nbsp;·&nbsp; Klaviyo Attributed = Klaviyo multi-touch model, capped at Shopify Total (can't exceed actual revenue) &nbsp;·&nbsp; Shopify Last-Click = orders where Shopify's last-touch attribution = Klaviyo email (referring_channel='klaviyo', net of refunds)</div>
+<div class="note-card">&#128202; Shopify Total = all store orders &nbsp;·&nbsp; Klaviyo Campaigns = revenue Klaviyo attributes to campaign sends (flows excluded to avoid multi-touch double-count) &nbsp;·&nbsp; Shopify Last-Click = orders where Shopify's last-touch attribution = Klaviyo email (referring_channel='klaviyo', net of refunds)</div>
 <div class="full-card"><div class="card-title">Email Revenue vs Shopify Revenue — Weekly Trend</div><canvas id="ch-email-vs-shopify"></canvas></div>
 <div class="full-card"><div class="card-title">Email Participation % — Weekly (Klaviyo Attributed ÷ Shopify Total · Last-Click ÷ Shopify Total)</div><canvas id="ch-email-participation"></canvas></div>
 </div>
@@ -560,24 +560,22 @@ function render(){
   const _evD=DATA.l90d.camps.overtime.d,_evV=DATA.l90d.camps.overtime.v;
   const campWkEv=new Array(14).fill(0);
   _evD.forEach((ds,i)=>{const dt=new Date(ds);const idx=Math.floor((dt-_evBase)/(7*24*3600*1000));if(idx>=0&&idx<14)campWkEv[idx]+=_evV[i];});
-  const totCEv=campWkEv.reduce((a,b)=>a+b,0)||1;
-  const flowWkEv=campWkEv.map(v=>DATA.l90d.flows.totals.tcv*v/totCEv);
-  // Klaviyo Attributed cannot exceed Shopify Total (sanity cap — multi-touch can over-attribute)
-  const klavWkEv=campWkEv.map((v,i)=>+Math.min(v+flowWkEv[i], ORDDATA.rev[i]||(v+flowWkEv[i])).toFixed(2));
+  // Klaviyo Campaign revenue, capped at Shopify Total (campaigns only — flows excluded to avoid multi-touch double-count)
+  const klavWkEv=campWkEv.map((v,i)=>+Math.min(v, ORDDATA.rev[i]||v).toFixed(2));
   const hasShopEmail=SHOPIFY_EMAIL.some(v=>v>0);
   const evDatasets=[
     {label:'Shopify Total',data:ORDDATA.rev,backgroundColor:'rgba(120,120,120,.25)',borderColor:'#999',borderWidth:1.5,type:'bar'},
-    {label:'Klaviyo Attributed (capped at Shopify Total)',data:klavWkEv,borderColor:PINK,backgroundColor:'transparent',borderWidth:2,type:'line',tension:.3,pointRadius:3,pointBackgroundColor:PINK},
+    {label:'Klaviyo Campaigns (attributed)',data:klavWkEv,borderColor:PINK,backgroundColor:'transparent',borderWidth:2,type:'line',tension:.3,pointRadius:3,pointBackgroundColor:PINK},
   ];
   if(hasShopEmail)evDatasets.push({label:'Shopify Last-Click',data:SHOPIFY_EMAIL,borderColor:LAV,backgroundColor:'transparent',borderWidth:2,type:'line',tension:.3,pointRadius:3,pointBackgroundColor:LAV,borderDash:[4,3]});
   mk('ch-email-vs-shopify',{type:'bar',data:{labels:WK,datasets:evDatasets},options:{responsive:true,interaction:{mode:'index',intersect:false},
     scales:{y:{ticks:{callback:v=>fmt$(v),font:{size:9,family:'Montserrat'}},grid:{color:'#f0f0f0'}}},
     plugins:{legend:{labels:{font:{size:9,family:'Montserrat'}}},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+fmt$(ctx.raw)}}}}});
 
-  // Participation % — Klaviyo Attributed and Shopify Last-Click as share of Shopify Total
+  // Participation % — Klaviyo Campaigns and Shopify Last-Click as share of Shopify Total
   const partKlav=ORDDATA.rev.map((tot,i)=>tot>0?+(klavWkEv[i]/tot*100).toFixed(2):0);
   const partLC=ORDDATA.rev.map((tot,i)=>tot>0?+((SHOPIFY_EMAIL[i]||0)/tot*100).toFixed(2):0);
-  const partDatasets=[{label:'Klaviyo Attributed %',data:partKlav,borderColor:PINK,backgroundColor:'rgba(232,138,168,0.15)',borderWidth:2,type:'line',tension:.3,pointRadius:3,pointBackgroundColor:PINK,fill:true}];
+  const partDatasets=[{label:'Klaviyo Campaigns %',data:partKlav,borderColor:PINK,backgroundColor:'rgba(232,138,168,0.15)',borderWidth:2,type:'line',tension:.3,pointRadius:3,pointBackgroundColor:PINK,fill:true}];
   if(hasShopEmail)partDatasets.push({label:'Shopify Last-Click %',data:partLC,borderColor:LAV,backgroundColor:'transparent',borderWidth:2,type:'line',tension:.3,pointRadius:3,pointBackgroundColor:LAV,borderDash:[4,3]});
   mk('ch-email-participation',{type:'line',data:{labels:WK,datasets:partDatasets},options:{responsive:true,interaction:{mode:'index',intersect:false},
     scales:{y:{ticks:{callback:v=>v+'%',font:{size:9,family:'Montserrat'}},grid:{color:'#f0f0f0'}}},
