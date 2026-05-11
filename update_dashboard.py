@@ -464,9 +464,9 @@ def build_period(days):
             "rpr":  safe(st.get("revenue_per_recipient", 0)),
         })
 
-    c_rows_top = sorted(all_c_rows, key=lambda x: x["cv"], reverse=True)[:15]
+    c_rows_top = sorted(all_c_rows, key=lambda x: x["cv"], reverse=True)[:20]
     all_f_rows = build_flow_rows(f_resp, fn)
-    f_rows_top = all_f_rows[:15]
+    f_rows_top = all_f_rows[:20]
     ct = build_camp_totals(all_c_rows)
 
     no_cs  = lambda rows: [r for r in rows if not re.search(r'\bcs\b| - cs ', r["name"], re.I)]
@@ -568,6 +568,19 @@ def main():
 
     with open("index.html", "r", encoding="utf-8") as f:
         html = f.read()
+
+    # Preserve 'segments' section from the previous DATA — this script does not
+    # regenerate it, so without this merge the section disappears from the dashboard.
+    m_prev = re.search(r'const DATA\s*=\s*(\{.*?\});', html, re.DOTALL)
+    if m_prev:
+        try:
+            prev_data = json.loads(m_prev.group(1))
+            for period in ("l7d", "l28d", "l60d", "l90d"):
+                seg = (prev_data.get(period) or {}).get("segments")
+                if seg is not None:
+                    data_js[period]["segments"] = seg
+        except Exception as ex:
+            print(f"  WARNING: could not preserve segments from prior DATA: {ex}")
 
     today_str = TODAY.strftime("%b %d %Y").upper()
     today_display = TODAY.strftime("%b %d, %Y").upper()
