@@ -250,28 +250,42 @@ def get_campaign_names(start, end):
 
 def build_flow_rows(resp, flow_names):
     """All flow rows sorted desc by conversion_value (no truncation).
-    Caller slices [:15] for display; totals use full list."""
-    rows = []
+    Caller slices [:15] for display; totals use full list.
+    Aggregates by flow_id so multi-message flows (e.g. Welcome Series) appear as one row."""
+    acc = {}
     for item in (resp.get("data") or []):
-        g   = item.get("groupings", {})
-        st  = item.get("statistics", {})
+        g  = item.get("groupings", {})
+        st = item.get("statistics", {})
         fid = g.get("flow_id", "")
-        name = flow_names.get(fid, fid)
         rc  = int(st.get("recipients", 0) or 0)
         if rc == 0: continue
-        cv  = safe(st.get("conversion_value", 0), 2)
-        rpr = safe(st.get("revenue_per_recipient", 0))
+        if fid not in acc:
+            acc[fid] = {"rc": 0, "cn": 0, "cv": 0.0,
+                        "opr_s": 0.0, "ctr_s": 0.0, "cvr_s": 0.0,
+                        "br_s": 0.0, "ur_s": 0.0}
+        a = acc[fid]
+        a["rc"]    += rc
+        a["cn"]    += int(st.get("conversions", 0) or 0)
+        a["cv"]    += safe(st.get("conversion_value", 0), 2)
+        a["opr_s"] += pct(st.get("open_rate"))        * rc
+        a["ctr_s"] += pct(st.get("click_rate"))        * rc
+        a["cvr_s"] += pct(st.get("conversion_rate"))   * rc
+        a["br_s"]  += pct(st.get("bounce_rate"))       * rc
+        a["ur_s"]  += pct(st.get("unsubscribe_rate"))  * rc
+    rows = []
+    for fid, a in acc.items():
+        rc = a["rc"]
         rows.append({
-            "name": name,
-            "rc":   rc,
-            "opr":  pct(st.get("open_rate")),
-            "ctr":  pct(st.get("click_rate")),
-            "cvr":  pct(st.get("conversion_rate")),
-            "cn":   int(st.get("conversions", 0) or 0),
-            "cv":   cv,
-            "rpr":  rpr,
-            "br":   pct(st.get("bounce_rate")),
-            "ur":   pct(st.get("unsubscribe_rate")),
+            "name":   flow_names.get(fid, fid),
+            "rc":     rc,
+            "opr":    round(a["opr_s"] / rc, 3) if rc else 0,
+            "ctr":    round(a["ctr_s"] / rc, 3) if rc else 0,
+            "cvr":    round(a["cvr_s"] / rc, 3) if rc else 0,
+            "cn":     a["cn"],
+            "cv":     round(a["cv"], 2),
+            "rpr":    round(a["cv"] / rc, 4) if rc else 0,
+            "br":     round(a["br_s"] / rc, 3) if rc else 0,
+            "ur":     round(a["ur_s"] / rc, 3) if rc else 0,
             "status": "live",
         })
     rows.sort(key=lambda x: x["cv"], reverse=True)
