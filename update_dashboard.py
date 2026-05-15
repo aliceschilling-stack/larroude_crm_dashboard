@@ -219,33 +219,48 @@ def build_overtime(series_resp):
     return {"d":d,"v":v,"r":r,"o":o,"c":c,"p":p}
 
 def get_campaign_names(start, end):
+    # Pede send_time (data real de envio) E scheduled_at (fallback).
+    # Sort por -scheduled_at (Klaviyo só permite sort por scheduled_at).
+    # Paginação é tolerante: não para por campos nulos.
     params = {
         "filter": "equals(messages.channel,'email')",
-        "fields[campaign]": "name,scheduled_at",
+        "fields[campaign]": "name,scheduled_at,send_time",
         "sort": "-scheduled_at",
     }
     info = {}
     url = f"{BASE}/campaigns/"
     start_s, end_s = str(start), str(end)
-    while url:
+    pages = 0
+    older_streak = 0  # quantas campanhas seguidas com data válida < start_s
+    while url and pages < 60:
         r = _get(url, headers=HEADERS, params=params)
         r.raise_for_status()
         body = r.json()
-        found_older = False
         for item in body.get("data", []):
             attrs = item["attributes"]
-            st = (attrs.get("scheduled_at") or "")[:10]
-            if st < start_s:
-                found_older = True
+            send_time = (attrs.get("send_time")    or "")[:10]
+            sched     = (attrs.get("scheduled_at") or "")[:10]
+            # Prioriza data real de envio; cai pro agendado se faltar
+            st = send_time or sched
+            if not st:
+                # Campanha sem data alguma (rascunho, ou send_time ainda não populado).
+                # Pula sem interromper paginação.
                 continue
+            if st < start_s:
+                older_streak += 1
+                continue
+            older_streak = 0
             if st <= end_s:
                 info[item["id"]] = {
                     "name": attrs.get("name", item["id"]),
                     "st":   st,
                 }
         next_url = body.get("links", {}).get("next")
-        url = None if (not next_url or found_older) else next_url
+        # Só para se achou 25+ campanhas seguidas mais antigas que start_s
+        # (margem de segurança contra send_time != scheduled_at).
+        url = None if (not next_url or older_streak >= 25) else next_url
         params = {}
+        pages += 1
     return info
 
 def build_flow_rows(resp, flow_names):
@@ -426,6 +441,8 @@ def build_overtime_from_rows(c_resp, cn, start, end):
     for item in (c_resp.get("data") or []):
         g  = item.get("groupings", {})
         st = item.get("statistics", {})
+        channel = g.get("send_channel", "")
+        if channel and channel != "email": continue
         cid   = g.get("campaign_id", "")
         cinfo = cn.get(cid, {})
         send_date = cinfo.get("st", "") if isinstance(cinfo, dict) else ""
