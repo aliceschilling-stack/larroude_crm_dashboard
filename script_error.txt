@@ -1,10 +1,12 @@
 Traceback (most recent call last):
-  File "/Users/aliceschilling/Claude/larroude_crm_dashboard/update_dashboard.py", line 607, in <module>
+  File "/Users/aliceschilling/Claude/larroude_crm_dashboard/update_dashboard.py", line 651, in <module>
     main()
-  File "/Users/aliceschilling/Claude/larroude_crm_dashboard/update_dashboard.py", line 529, in main
-    l7d = build_period(7)
-  File "/Users/aliceschilling/Claude/larroude_crm_dashboard/update_dashboard.py", line 439, in build_period
-    c_resp = campaign_report(s, e)
-  File "/Users/aliceschilling/Claude/larroude_crm_dashboard/update_dashboard.py", line 96, in campaign_report
-    raise RuntimeError(f"campaign-values-reports {r.status_code}: {r.text[:3000]}")
-RuntimeError: campaign-values-reports 401: {"errors":[{"id":"2541cbe9-89f4-4757-b42b-a9a2c0dba7ae","status":401,"code":"not_authenticated","title":"Authentication credentials were not provided.","detail":"Missing or invalid private key.","source":{"pointer":"/data/"}}]}
+  File "/Users/aliceschilling/Claude/larroude_crm_dashboard/update_dashboard.py", line 569, in main
+    l90d = build_period(90)
+  File "/Users/aliceschilling/Claude/larroude_crm_dashboard/update_dashboard.py", line 474, in build_period
+    cn     = get_campaign_names(s, e)
+  File "/Users/aliceschilling/Claude/larroude_crm_dashboard/update_dashboard.py", line 237, in get_campaign_names
+    r.raise_for_status()
+  File "/Users/aliceschilling/Library/Python/3.9/lib/python/site-packages/requests/models.py", line 1026, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 522 Server Error: <none> for url: https://a.klaviyo.com/api/campaigns/?filter=equals%28messages.channel%2C%27email%27%29&fields%5Bcampaign%5D=name%2Cscheduled_at%2Csend_time&sort=-scheduled_at
