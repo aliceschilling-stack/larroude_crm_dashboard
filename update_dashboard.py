@@ -76,7 +76,9 @@ def iso(d): return d.isoformat() + "T00:00:00Z"
 def iso_end(d): return d.isoformat() + "T23:59:59Z"
 
 def period_dates(days, offset=0):
-    end   = TODAY - timedelta(days=1 + offset)
+    # offset=0 → janela termina HOJE (dados do dia atual são parciais até fechar
+    # o dia em UTC, mas aparecem no overtime). offset=days → período prior adjacente.
+    end   = TODAY - timedelta(days=offset)
     start = end   - timedelta(days=days - 1)
     return start, end
 
@@ -87,7 +89,7 @@ def campaign_report(start, end):
         "statistics": [
             "recipients", "open_rate", "click_rate", "conversion_rate",
             "conversions", "bounce_rate", "unsubscribe_rate",
-            "conversion_value", "revenue_per_recipient",
+            "conversion_value", "revenue_per_recipient", "clicks_unique",
         ],
         "group_by": ["campaign_id", "campaign_message_id", "send_channel"],
     }}}
@@ -122,7 +124,7 @@ def flow_report(start, end):
         "statistics": [
             "recipients", "open_rate", "click_rate", "conversion_rate",
             "conversions", "bounce_rate", "unsubscribe_rate",
-            "conversion_value", "revenue_per_recipient",
+            "conversion_value", "revenue_per_recipient", "clicks_unique",
         ],
         "group_by": ["flow_id", "flow_message_id", "send_channel"],
     }}}
@@ -172,6 +174,7 @@ def build_camp_top(resp, campaign_names):
             "ctr":  pct(st.get("click_rate")),
             "cvr":  pct(st.get("conversion_rate")),
             "cn":   int(st.get("conversions", 0) or 0),
+            "cl":   int(st.get("clicks_unique", 0) or 0),
             "br":   pct(st.get("bounce_rate")),
             "ur":   pct(st.get("unsubscribe_rate")),
             "cv":   cv,
@@ -181,15 +184,16 @@ def build_camp_top(resp, campaign_names):
     return rows[:15]
 
 def build_camp_totals(rows):
-    if not rows: return {"tcv":0,"tc":0,"trec":0,"aor":0,"actr":0,"acr":0,"avg_rpr":0,"nc":0}
+    if not rows: return {"tcv":0,"tc":0,"tcl":0,"trec":0,"aor":0,"actr":0,"acr":0,"avg_rpr":0,"nc":0}
     tcv  = round(sum(r["cv"]  for r in rows), 2)
     tc   = sum(r["cn"]  for r in rows)
+    tcl  = sum(r.get("cl", 0) for r in rows)
     trec = sum(r["rc"]  for r in rows)
     aor  = round(sum(r["opr"]*r["rc"] for r in rows)/trec, 2) if trec else 0
     actr = round(sum(r["ctr"]*r["rc"] for r in rows)/trec, 2) if trec else 0
     acr  = round(tc/trec*100, 3) if trec else 0
     avg_rpr = round(tcv/trec, 4) if trec else 0
-    return {"tcv":tcv,"tc":tc,"trec":trec,"aor":aor,"actr":actr,"acr":acr,"avg_rpr":avg_rpr,"nc":len(rows)}
+    return {"tcv":tcv,"tc":tc,"tcl":tcl,"trec":trec,"aor":aor,"actr":actr,"acr":acr,"avg_rpr":avg_rpr,"nc":len(rows)}
 
 def build_overtime(series_resp):
     daily = defaultdict(lambda: {"v":0,"r":0,"o_sum":0,"c_sum":0,"cnt":0})
@@ -275,12 +279,13 @@ def build_flow_rows(resp, flow_names):
         rc  = int(st.get("recipients", 0) or 0)
         if rc == 0: continue
         if fid not in acc:
-            acc[fid] = {"rc": 0, "cn": 0, "cv": 0.0,
+            acc[fid] = {"rc": 0, "cn": 0, "cl": 0, "cv": 0.0,
                         "opr_s": 0.0, "ctr_s": 0.0, "cvr_s": 0.0,
                         "br_s": 0.0, "ur_s": 0.0}
         a = acc[fid]
         a["rc"]    += rc
         a["cn"]    += int(st.get("conversions", 0) or 0)
+        a["cl"]    += int(st.get("clicks_unique", 0) or 0)
         a["cv"]    += safe(st.get("conversion_value", 0), 2)
         a["opr_s"] += pct(st.get("open_rate"))        * rc
         a["ctr_s"] += pct(st.get("click_rate"))        * rc
@@ -297,6 +302,7 @@ def build_flow_rows(resp, flow_names):
             "ctr":    round(a["ctr_s"] / rc, 3) if rc else 0,
             "cvr":    round(a["cvr_s"] / rc, 3) if rc else 0,
             "cn":     a["cn"],
+            "cl":     a["cl"],
             "cv":     round(a["cv"], 2),
             "rpr":    round(a["cv"] / rc, 4) if rc else 0,
             "br":     round(a["br_s"] / rc, 3) if rc else 0,
@@ -307,15 +313,16 @@ def build_flow_rows(resp, flow_names):
     return rows
 
 def build_flow_totals(rows):
-    if not rows: return {"tcv":0,"tc":0,"trec":0,"aor":0,"actr":0,"acr":0,"avg_rpr":0,"nf":0}
+    if not rows: return {"tcv":0,"tc":0,"tcl":0,"trec":0,"aor":0,"actr":0,"acr":0,"avg_rpr":0,"nf":0}
     tcv  = round(sum(r["cv"]  for r in rows), 2)
     tc   = sum(r["cn"]  for r in rows)
+    tcl  = sum(r.get("cl", 0) for r in rows)
     trec = sum(r["rc"]  for r in rows)
     aor  = round(sum(r["opr"]*r["rc"] for r in rows)/trec, 2) if trec else 0
     actr = round(sum(r["ctr"]*r["rc"] for r in rows)/trec, 2) if trec else 0
     acr  = round(tc/trec*100, 3) if trec else 0
     avg_rpr = round(tcv/trec, 4) if trec else 0
-    return {"tcv":tcv,"tc":tc,"trec":trec,"aor":aor,"actr":actr,"acr":acr,"avg_rpr":avg_rpr,"nf":len(rows)}
+    return {"tcv":tcv,"tc":tc,"tcl":tcl,"trec":trec,"aor":aor,"actr":actr,"acr":acr,"avg_rpr":avg_rpr,"nf":len(rows)}
 
 def get_flow_names():
     r = _get(f"{BASE}/flows/", headers=HEADERS, params={"fields[flow]":"name"})
@@ -357,6 +364,7 @@ def build_prior(days):
             "ctr":  pct(st.get("click_rate")),
             "cvr":  pct(st.get("conversion_rate")),
             "cn":   int(st.get("conversions", 0) or 0),
+            "cl":   int(st.get("clicks_unique", 0) or 0),
             "br":   pct(st.get("bounce_rate")),
             "ur":   pct(st.get("unsubscribe_rate")),
             "cv":   safe(st.get("conversion_value", 0), 2),
@@ -375,6 +383,7 @@ def build_prior(days):
     return {
         "camp_rev":  ct["tcv"],  "flow_rev":  ft["tcv"],
         "camp_conv": ct["tc"],   "flow_conv": ft["tc"],
+        "camp_clicks": ct["tcl"], "flow_clicks": ft["tcl"],
         "or":   round(sum(r["opr"]*r["rc"] for r in nc_all)/trec_c, 2),
         "cr":   round(sum(r["ctr"]*r["rc"] for r in nc_all)/trec_c, 2),
         "rpr":  ct["avg_rpr"],
@@ -408,6 +417,7 @@ def build_yoy(days):
             "ctr":  pct(st.get("click_rate")),
             "cvr":  pct(st.get("conversion_rate")),
             "cn":   int(st.get("conversions", 0) or 0),
+            "cl":   int(st.get("clicks_unique", 0) or 0),
             "br":   pct(st.get("bounce_rate")),
             "ur":   pct(st.get("unsubscribe_rate")),
             "cv":   safe(st.get("conversion_value", 0), 2),
@@ -425,6 +435,7 @@ def build_yoy(days):
     return {
         "camp_rev":  ct["tcv"],  "flow_rev":  ft["tcv"],
         "camp_conv": ct["tc"],   "flow_conv": ft["tc"],
+        "camp_clicks": ct["tcl"], "flow_clicks": ft["tcl"],
         "or":        round(sum(r["opr"]*r["rc"] for r in nc_all)/trec_c, 2),
         "cr":        round(sum(r["ctr"]*r["rc"] for r in nc_all)/trec_c, 2),
         "rpr":       ct["avg_rpr"],
@@ -489,6 +500,7 @@ def build_period(days):
             "ctr":  pct(st.get("click_rate")),
             "cvr":  pct(st.get("conversion_rate")),
             "cn":   int(st.get("conversions", 0) or 0),
+            "cl":   int(st.get("clicks_unique", 0) or 0),
             "br":   pct(st.get("bounce_rate")),
             "ur":   pct(st.get("unsubscribe_rate")),
             "cv":   safe(st.get("conversion_value", 0), 2),
