@@ -2,7 +2,7 @@ name: Update CRM Dashboard
 
 on:
   schedule:
-    - cron: "0 13 * * *"   # 9am EST todo dia
+      - cron: "0 11 * * *"   # 11:00 UTC (~08h BRT / 07h EDT) — antes do daily-campaign-review (09:09 BRT)
   workflow_dispatch:
 
 jobs:
